@@ -1,0 +1,14 @@
+Package: StockScreenStrategies
+Type: Package
+Title: A Collection of Home Grown Stock Screening Functions
+Version: 0.1.0
+Author: Kirk Gosik
+Maintainer: Kirk Gosik <kdgosik@gmail.com>
+Description: A few stock screening functions I have been using. These are created from 
+my experience and research I have done on my own time as well as other technical 
+analysis tools.  I wanted to make them into a package to make them easier to use and 
+decided to share them.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports: quantmod, TTR, xts, bcp, dygraphs, magrittr, dplyr
