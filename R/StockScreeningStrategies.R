@@ -110,91 +110,6 @@ rm(list = ls()); gc(reset = TRUE)
 getSymbols("NVDA")
 
 
-    # pracma's polyfit
-
-norm_func_search <- function( data, window_length = 30, comparisons = 10, degree = 5 ) {
-
-  if (xts::xtsible(data)) {
-    if (!xts::is.xts(data))
-      data <- xts::as.xts(data)
-    format <- "date"
-  }
-  else if (is.list(data) && is.numeric(data[[1]])) {
-    if (is.null(names(data)))
-      stop("For numeric values, 'data' must be a named list or data frame")
-    format <- "numeric"
-  }
-  else {
-    stop("Unsupported type passed to argument 'data'.")
-  }
-
-  data <- as.numeric((Hi(data) + Lo(data))/2)
-
-  end <- length(data)
-  win <- window_length
-
-  current_poly <- polyfit(1 : win, as.vector(scale(data[(end - (win - 1)) : end])), n = degree)
-  current_poly_func <- function(x) polyval(current_poly, x)
-
-  norm_val <- NULL
-  for( i in 1 : (end - (2 * win)) ) {
-    check_poly <- polyfit(1 : win, as.vector(scale(data[i : (i + (win - 1))])), n = degree)
-    check_poly_func <- function(x) polyval(check_poly, x)
-
-    norm_val[i] <- fnorm(current_poly_func, check_poly_func, 1, win, p = Inf)
-  }
-  idx <- which(norm_val <= sort(norm_val)[comparisons])
-  list(data[(idx + (win + 20))] / data[idx],
-       idx,
-       harmmean(data[(idx + (win + 20))] / data[idx]),
-       mean(as.numeric(data[(idx + (win + 20))] / data[idx] > 1)))
-}
-
-
-
-
-  # splines's ns (natural splines) and loess smoothing
-
-NaturalSplines_screen <- function( data, window_length = 60, comparisons = 10, degree = 5 ) {
-
-  if (xts::xtsible(data)) {
-    if (!xts::is.xts(data))
-      data <- xts::as.xts(data)
-    format <- "date"
-  }
-  else if (is.list(data) && is.numeric(data[[1]])) {
-    if (is.null(names(data)))
-      stop("For numeric values, 'data' must be a named list or data frame")
-    format <- "numeric"
-  }
-  else {
-    stop("Unsupported type passed to argument 'data'.")
-  }
-
-  data <- as.numeric((Hi(data) + Lo(data))/2)
-
-  end <- length(data)
-  win <- window_length
-
-  current_y <- as.vector(scale(data[(end - (win - 1)) : end]))
-  x <- seq(1, win)
-  current_y_pred <- predict(lm(current_y ~ ns(x, df = degree)))
-
-  norm_val <- NULL
-  for( i in 1 : (end - (2 * win)) ) {
-    check_y <- as.vector(scale(data[i : (i + (win - 1))]))
-    check_y_pred <- predict(lm(check_y ~ ns(x, df = degree)))
-
-    norm_val[i] <- Norm(current_y_pred - check_y_pred, p = Inf)
-  }
-  idx <- which(norm_val <= sort(norm_val)[comparisons])
-  list(data[(idx + (win + 20))] / data[idx],
-       idx,
-       harmmean(data[(idx + (win + 20))] / data[idx]),
-       mean(as.numeric(data[(idx + (win + 20))] / data[idx] > 1)))
-}
-
-
 Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
   u <- -1
   v <- 1
@@ -252,61 +167,59 @@ PatternMatch_screen <- function( data,
     stop("Unsupported type passed to argument 'data'.")
   }
 
-  data <- as.numeric((Hi(data) + Lo(data))/2)
+  vec <- as.numeric((Hi(data) + Lo(data))/2)
 
-  end <- length(data)
+  end <- length(vec)
   win <- window_length
 
-  current_y <- as.vector(scale(data[(end - (win - 1)) : end]))
+  current_y <- as.vector(scale(vec[(end - (win - 1)) : end]))
   x <- seq(1, win)
 
   current_y_pred <- switch(method,
                            percent = sapply(current_y, function(price) price/(dplyr::last(price))),
                            poly = predict(lm(current_y ~ poly(x, degree))),
-                           legendre = predict(lm(current_y ~ Legendre(x, degree))),
+                           legendre = predict(lm(current_y ~ Legendre(t = x, n = degree))),
                            ns = predict(lm(current_y ~ ns(x, df = df))),
                            loess = predict(loess(current_y ~ x, span = span)))
 
   norm_val <- NULL
   for( i in 1 : (end - (2 * win)) ) {
-    check_y <- as.vector(scale(data[i : (i + (win - 1))]))
+    check_y <- as.vector(scale(vec[i : (i + (win - 1))]))
     check_y_pred <- switch(method,
                            percent = sapply(check_y, function(price) price/(dplyr::last(price))),
                            poly = predict(lm(check_y ~ poly(x, degree))),
-                           legendre = predict(lm(check_y ~ Legendre(x, degree))),
+                           legendre = predict(lm(check_y ~ Legendre(t = x, n = degree))),
                            ns = predict(lm(check_y ~ ns(x, df = df))),
                            loess = predict(loess(check_y ~ x, span = span)))
 
     norm_val[i] <- sum((current_y_pred - check_y_pred)^2)^(1/2)
   }
   idx <- which(norm_val <= sort(norm_val)[comparisons])
-  list(data[(idx + (win + 20))] / data[idx],
-       idx,
-       harmmean(data[(idx + (win + 20))] / data[idx]),
-       mean(as.numeric(data[(idx + (win + 20))] / data[idx] > 1)))
+  
+  list(data = data,
+       PercentChange = vec[(idx + (win + 20))] / vec[idx],
+       index = idx,
+       "Mean Percent Change" = harmmean(vec[(idx + (win + 20))] / vec[idx]),
+       "Proportion Up" = mean(as.numeric(vec[(idx + (win + 20))] / vec[idx] > 1)))
 }
 
 
 library(ggplot2)
 library(plotly)
-
-end <- nrow(NVDA)
+out <- PatternMatch_screen(NVDA)
+end <- NROW(out$data)
 win <- 60
-plot_data <- data.frame(Date = c(index(NVDA)[(end - (win - 1)) : end], seq(index(NVDA)[end],index(NVDA)[end]+20, by = 1)),
-                        Price = c(as.numeric(Cl(NVDA)[(end - (win - 1)) : end]), rep(NA, 21)),
-                        Pattern1 = as.numeric(Cl(NVDA)[543:623]),
-                        Pattern2 = as.numeric(Cl(NVDA)[776:856]),
-                        Pattern3 = as.numeric(Cl(NVDA)[1060:1140]),
-                        Pattern4 = as.numeric(Cl(NVDA)[1200:1280]),
-                        Pattern5 = as.numeric(Cl(NVDA)[1518:1598]))
+plot_data <- data.frame(Date = c(index(out$data)[(end - (win - 1)) : end], seq(index(out$data)[end],index(out$data)[end]+20, by = 1)),
+                        Price = c(as.numeric(Cl(out$data)[(end - (win - 1)) : end]), rep(NA, 21)),
+                        Pattern1 = as.numeric(Cl(out$data)[out$index[1]:(out$index[1] + 80)]),
+                        Pattern2 = as.numeric(Cl(out$data)[out$index[4]:(out$index[4] + 80)]),
+                        Pattern3 = as.numeric(Cl(out$data)[out$index[9]:(out$index[9] + 80)]))
 
 plot_data <- plot_data %>%
   mutate(Price = scale(Price),
          Pattern1 = scale(Pattern1),
          Pattern2 = scale(Pattern2),
-         Pattern3 = scale(Pattern3),
-         Pattern4 = scale(Pattern4),
-         Pattern5 = scale(Pattern5))
+         Pattern3 = scale(Pattern3))
 
 
 ggplot(plot_data, aes(x = Date, y = Price)) +
@@ -314,9 +227,7 @@ ggplot(plot_data, aes(x = Date, y = Price)) +
   geom_smooth(span = 0.5) +
   geom_smooth(aes(x = Date, y = Pattern1), color = "darkgreen", span = 0.5) +
   geom_smooth(aes(x = Date, y = Pattern2), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern3), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern4), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern5), color = "darkgreen", span = 0.5)
+  geom_smooth(aes(x = Date, y = Pattern3), color = "darkgreen", span = 0.5) 
 
 
 ## Ichimoku's Cloud ################################
