@@ -14,18 +14,24 @@
 #' @importFrom magrittr `%>%`
 #' @importFrom magrittr `%$%`
 
+library(magrittr)
+library(dplyr)
+library(dygraphs)
+library(quantmod)
+library(bcp)
+library(pracma)
 
 ## Change Point ########
 
-changepoint_screen <- function( data, cutoff = 0.9 ) {
+changepoint_screen <- function( stockdata, cutoff = 0.9 ) {
 
-  if (xts::xtsible(data)) {
-    if (!xts::is.xts(data))
-      data <- xts::as.xts(data)
+  if (xts::xtsible(stockdata)) {
+    if (!xts::is.xts(stockdata))
+      data <- xts::as.xts(stockdata)
     format <- "date"
   }
-  else if (is.list(data) && is.numeric(data[[1]])) {
-    if (is.null(names(data)))
+  else if (is.list(stockdata) && is.numeric(stockdata[[1]])) {
+    if (is.null(names(stockdata)))
       stop("For numeric values, 'data' must be a named list or data frame")
     format <- "numeric"
   }
@@ -33,17 +39,17 @@ changepoint_screen <- function( data, cutoff = 0.9 ) {
     stop("Unsupported type passed to argument 'data'.")
   }
 
-  bcp_post <- data %>%
-    quantmod::dailyReturn %>%
-    bcp::bcp %$%
+  bcp_post <- stockdata %>%
+    dailyReturn %>%
+    bcp %$%
     posterior.prob %>%
     ts %>%
-    xts::as.xts
+    as.xts
 
-  index(bcp_post) <- index(data)
-  bcp_events <- index(data)[which(bcp_post > cutoff)]
+  index(bcp_post) <- index(stockdata)
+  bcp_events <- index(stockdata)[which(bcp_post > cutoff)]
 
-  list(data = cbind(data, bcp_post),
+  list(data = cbind(stockdata, bcp_post),
        events = bcp_events)
 }
 
@@ -61,14 +67,14 @@ graph_events <- function( screen_list ) {
 
 ## Techincal Combo: EMA, SAR and MACD #######
 
-SARandEMA_screen <- function( data ){
+SARandEMA_screen <- function( stockdata ){
 
-  if (xts::xtsible(data)) {
-    if (!xts::is.xts(data))
-      data <- xts::as.xts(data)
+  if (xts::xtsible(stockdata)) {
+    if (!xts::is.xts(stockdata))
+      stockdata <- xts::as.xts(stockdata)
     format <- "date"
   }
-  else if (is.list(data) && is.numeric(data[[1]])) {
+  else if (is.list(data) && is.numeric(stockdata[[1]])) {
     if (is.null(names(data)))
       stop("For numeric values, 'data' must be a named list or data frame")
     format <- "numeric"
@@ -77,27 +83,33 @@ SARandEMA_screen <- function( data ){
     stop("Unsupported type passed to argument 'data'.")
   }
 
-  data <- cbind(quantmod::OHLC(data),
-                TTR::SAR(data),
-                TTR::EMA(quantmod::Cl(data), n = 20),
-                TTR::MACD(quantmod::Cl(data))
+  workingdata <- cbind(quantmod::OHLC(stockdata),
+                TTR::SAR(stockdata),
+                TTR::EMA(quantmod::Cl(stockdata), n = 20),
+                TTR::MACD(quantmod::Cl(stockdata))
   ) %>% as.data.frame
-  colnames(data) <- c("Open", "High", "Low", "Close", "SAR", "EMA20", "MACD", "MACDsignal")
+  colnames(workingdata) <- c("Open", "High", "Low", "Close", "SAR", "EMA20", "MACD", "MACDsignal")
 
-  data <- data %>%
-    dplyr::mutate(Date = as.Date(rownames(data)),
+  workingdata <- workingdata %>%
+    dplyr::mutate(Date = as.Date(index(stockdata)),
            SARAboveCandle = as.numeric(SAR > High),
            SARNearHigh = as.numeric(between(SAR / High, 1, 1.005)),
            SARBelowMA = as.numeric(SAR < EMA20),
            MACDAboveSignal = as.numeric(MACD > MACDsignal),
            Position = as.numeric(SARAboveCandle + SARNearHigh + SARBelowMA == 3)
-    )
+    ) %>%
+    ts %>%
+    as.xts
+  
+  index(workingdata) <- index(stockdata)
 
-  buy_events <- data %>%
-    dplyr::filter(Position == 1) %>%
-    dplyr::select(Date)
+  # buy_events <- stockdata %>%
+  #   dplyr::filter(Position == 1) %>%
+  #   dplyr::select(Date)
+  
+  buy_events <- index(workingdata)[which(workingdata$Position == 1)]
 
-  list(data = data,
+  list(data = stockdata,
        events = buy_events)
 }
 
@@ -206,28 +218,37 @@ PatternMatch_screen <- function( data,
 
 library(ggplot2)
 library(plotly)
-out <- PatternMatch_screen(NVDA)
+
+test_points <- 40
+out <- PatternMatch_screen(NVDA[1:(NROW(NVDA) - test_points),])
+
+test_data <- NVDA[(NROW(NVDA) - test_points) : NROW(NVDA),]
+test_data <- data.frame(Date = index(test_data), Price = as.numeric(Cl(test_data)))
+
 end <- NROW(out$data)
 win <- 60
-plot_data <- data.frame(Date = c(index(out$data)[(end - (win - 1)) : end], seq(index(out$data)[end],index(out$data)[end]+20, by = 1)),
-                        Price = c(as.numeric(Cl(out$data)[(end - (win - 1)) : end]), rep(NA, 21)),
-                        Pattern1 = as.numeric(Cl(out$data)[out$index[1]:(out$index[1] + 80)]),
-                        Pattern2 = as.numeric(Cl(out$data)[out$index[4]:(out$index[4] + 80)]),
-                        Pattern3 = as.numeric(Cl(out$data)[out$index[9]:(out$index[9] + 80)]))
+plot_data <- data.frame(Date = c(index(out$data)[(end - (win - 1)) : end], seq(index(out$data)[end],index(out$data)[end]+test_points, by = 1)),
+                        Price = c(as.numeric(Cl(out$data)[(end - (win - 1)) : end]), test_data$Price),
+                        Pattern1 = as.numeric(Cl(out$data)[out$index[1]:(out$index[1] + win + test_points)]),
+                        Pattern2 = as.numeric(Cl(out$data)[out$index[4]:(out$index[4] + win + test_points)]),
+                        Pattern3 = as.numeric(Cl(out$data)[out$index[9]:(out$index[9] + win + test_points)]))
+
+
 
 plot_data <- plot_data %>%
   mutate(Price = scale(Price),
          Pattern1 = scale(Pattern1),
          Pattern2 = scale(Pattern2),
-         Pattern3 = scale(Pattern3))
+         Pattern3 = scale(Pattern3),
+         color = ifelse(Date %in% test_data$Date, "red","black"))
 
 
-ggplot(plot_data, aes(x = Date, y = Price)) +
+ggplot(plot_data, aes(x = Date, y = Price, color = I(color))) +
   geom_point() +
   geom_smooth(span = 0.5) +
   geom_smooth(aes(x = Date, y = Pattern1), color = "darkgreen", span = 0.5) +
   geom_smooth(aes(x = Date, y = Pattern2), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern3), color = "darkgreen", span = 0.5) 
+  geom_smooth(aes(x = Date, y = Pattern3), color = "darkgreen", span = 0.5)
 
 
 ## Ichimoku's Cloud ################################
