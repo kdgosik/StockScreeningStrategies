@@ -67,6 +67,22 @@ graph_events <- function( screen_list ) {
 
 ## Techincal Combo: EMA, SAR and MACD #######
 
+#' EMA, SAR and MACD Stock Screening
+#'
+#' This function will take in an xts dataset and conducat a bayesian change point analysis (from the bcp package)
+#' on the daily returns of the stock price.  It then returns the data with the appended posterior probabilities of a change point
+#' occuring and also a list of the dates of the events where the probability is above the cutoff value given.
+#'
+#' @param data Either time series data or numeric data. For time series, this must be an xts object or an object which is convertible to xts. For numeric data, this must be a named list or data frame, where the first element/column provides x-axis values and all subsequent elements/columns provide one or more series of y-values
+#' @param cutoff
+#' @return a summary of the linear model returned after the selection procedure
+#' @author Kirk Gosik kdgosik@gmail.com
+#' @details
+#' Conducts a change point analysis on the daily returns of a stock price.
+#' @export
+#' @importFrom magrittr `%>%`
+#' @importFrom magrittr `%$%`
+
 SARandEMA_screen <- function( stockdata ){
 
   if (xts::xtsible(stockdata)) {
@@ -115,10 +131,27 @@ SARandEMA_screen <- function( stockdata ){
 
 
 ## Natural Splines Pattern Matching ################
+
+#' Natural Splines Stock Screening
+#'
+#' This function will take in an xts dataset and conducat a bayesian change point analysis (from the bcp package)
+#' on the daily returns of the stock price.  It then returns the data with the appended posterior probabilities of a change point
+#' occuring and also a list of the dates of the events where the probability is above the cutoff value given.
+#'
+#' @param data Either time series data or numeric data. For time series, this must be an xts object or an object which is convertible to xts. For numeric data, this must be a named list or data frame, where the first element/column provides x-axis values and all subsequent elements/columns provide one or more series of y-values
+#' @param cutoff
+#' @return a summary of the linear model returned after the selection procedure
+#' @author Kirk Gosik kdgosik@gmail.com
+#' @details
+#' Conducts a change point analysis on the daily returns of a stock price.
+#' @export
+#' @importFrom magrittr `%>%`
+#' @importFrom magrittr `%$%`
+#' 
 require(pracma)
 require(quantmod)
 require(splines)
-rm(list = ls()); gc(reset = TRUE)
+# rm(list = ls()); gc(reset = TRUE)
 getSymbols("NVDA")
 
 
@@ -157,7 +190,7 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 
 
 
-PatternMatch_screen <- function( data,
+PatternMatch_screen <- function( stockdata,
                                  window_length = 60,
                                  comparisons = 10,
                                  method = "legendre",
@@ -165,13 +198,13 @@ PatternMatch_screen <- function( data,
                                  df = 5,
                                  span = 0.75 ) {
 
-  if (xts::xtsible(data)) {
-    if (!xts::is.xts(data))
-      data <- xts::as.xts(data)
+  if (xts::xtsible(stockdata)) {
+    if (!xts::is.xts(stockdata))
+      data <- xts::as.xts(stockdata)
     format <- "date"
   }
-  else if (is.list(data) && is.numeric(data[[1]])) {
-    if (is.null(names(data)))
+  else if (is.list(stockdata) && is.numeric(stockdata[[1]])) {
+    if (is.null(names(stockdata)))
       stop("For numeric values, 'data' must be a named list or data frame")
     format <- "numeric"
   }
@@ -179,7 +212,7 @@ PatternMatch_screen <- function( data,
     stop("Unsupported type passed to argument 'data'.")
   }
 
-  vec <- as.numeric((Hi(data) + Lo(data))/2)
+  vec <- as.numeric((Hi(stockdata) + Lo(stockdata))/2)
 
   end <- length(vec)
   win <- window_length
@@ -206,9 +239,10 @@ PatternMatch_screen <- function( data,
 
     norm_val[i] <- sum((current_y_pred - check_y_pred)^2)^(1/2)
   }
+  
   idx <- which(norm_val <= sort(norm_val)[comparisons])
   
-  list(data = data,
+  list(data = stockdata,
        PercentChange = vec[(idx + (win + 20))] / vec[idx],
        index = idx,
        "Mean Percent Change" = harmmean(vec[(idx + (win + 20))] / vec[idx]),
@@ -216,39 +250,7 @@ PatternMatch_screen <- function( data,
 }
 
 
-library(ggplot2)
-library(plotly)
 
-test_points <- 40
-out <- PatternMatch_screen(NVDA[1:(NROW(NVDA) - test_points),])
-
-test_data <- NVDA[(NROW(NVDA) - test_points) : NROW(NVDA),]
-test_data <- data.frame(Date = index(test_data), Price = as.numeric(Cl(test_data)))
-
-end <- NROW(out$data)
-win <- 60
-plot_data <- data.frame(Date = c(index(out$data)[(end - (win - 1)) : end], seq(index(out$data)[end],index(out$data)[end]+test_points, by = 1)),
-                        Price = c(as.numeric(Cl(out$data)[(end - (win - 1)) : end]), test_data$Price),
-                        Pattern1 = as.numeric(Cl(out$data)[out$index[1]:(out$index[1] + win + test_points)]),
-                        Pattern2 = as.numeric(Cl(out$data)[out$index[4]:(out$index[4] + win + test_points)]),
-                        Pattern3 = as.numeric(Cl(out$data)[out$index[9]:(out$index[9] + win + test_points)]))
-
-
-
-plot_data <- plot_data %>%
-  mutate(Price = scale(Price),
-         Pattern1 = scale(Pattern1),
-         Pattern2 = scale(Pattern2),
-         Pattern3 = scale(Pattern3),
-         color = ifelse(Date %in% test_data$Date, "red","black"))
-
-
-ggplot(plot_data, aes(x = Date, y = Price, color = I(color))) +
-  geom_point() +
-  geom_smooth(span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern1), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern2), color = "darkgreen", span = 0.5) +
-  geom_smooth(aes(x = Date, y = Pattern3), color = "darkgreen", span = 0.5)
 
 
 ## Ichimoku's Cloud ################################
