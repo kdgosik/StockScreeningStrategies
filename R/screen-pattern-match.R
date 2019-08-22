@@ -111,18 +111,19 @@ pattern_match_screen <- function( stockdata,
   
   current_y_pred <- switch(
     EXPR = method,
-    percent = sapply(current_y, function(price) price/(dplyr::last(price))),
+    percent = current_y / (dplyr::last(current_y)),
     poly = predict(lm(current_y ~ poly(x, degree))),
     legendre = predict(lm(current_y ~ Legendre(t = x, n = degree))),
     ns = predict(lm(current_y ~ ns(x, df = df))),
     loess = predict(loess(current_y ~ x, span = span))
     )
   
+  ## Calculate RSE from current to predicted
   norm_val <- NULL
   for( i in 1 : (end - (2 * win)) ) {
     check_y <- as.vector(scale(vec[i : (i + (win - 1))]))
     check_y_pred <- switch(method,
-                           percent = sapply(check_y, function(price) price/(dplyr::last(price))),
+                           percent = check_y / (dplyr::last(check_y)),
                            poly = predict(lm(check_y ~ poly(x, degree))),
                            legendre = predict(lm(check_y ~ Legendre(t = x, n = degree))),
                            ns = predict(lm(check_y ~ ns(x, df = df))),
@@ -130,12 +131,12 @@ pattern_match_screen <- function( stockdata,
     
     norm_val[i] <- sum((current_y_pred - check_y_pred)^2)^(1/2)
   }
-  
+  ## get indexes of the top n comparisons 
   idx <- which(norm_val <= sort(norm_val)[comparisons])
   
   list(data = stockdata,
-       PercentChange = vec[(idx + (win + 20))] / vec[idx],
+       percent_change = vec[(idx + (win + 20))] / vec[idx],
        index = idx,
-       "Mean Percent Change" = harmmean(vec[(idx + (win + 20))] / vec[idx]),
-       "Proportion Up" = mean(as.numeric(vec[(idx + (win + 20))] / vec[idx] > 1)))
+       avg_percent_change = harmmean(vec[(idx + (win + 20))] / vec[idx]),
+       proportion_up = mean(as.numeric(vec[(idx + (win + 20))] / vec[idx] > 1)))
 }

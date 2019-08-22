@@ -1,4 +1,4 @@
-#' Simple Moving Average Stock Screening
+#' EMA Stock Screening
 #'
 #' This function will take in an xts dataset and conducat a bayesian change point analysis (from the bcp package)
 #' on the daily returns of the stock price.  It then returns the data with the appended posterior probabilities of a change point
@@ -21,7 +21,7 @@
 
 
 
-sma_screen <- function( stockdata, short = 50, long = 200 ) {
+ema_screen <- function( stockdata, short = 50, long = 200 ) {
   
   if (xts::xtsible(stockdata)) {
     if (!xts::is.xts(stockdata))
@@ -37,16 +37,15 @@ sma_screen <- function( stockdata, short = 50, long = 200 ) {
     stop("Unsupported type passed to argument 'data'.")
   }
   
-  
-  short_sma <- SMA( Cl(stockdata), n = short )
-  long_sma <- SMA( Cl(stockdata), n = long )
+  short_ema <- EMA( Cl(stockdata), n = short )
+  long_ema <- EMA( Cl(stockdata), n = long )
+  buy <- short_ema - long_ema > 0
   run_corr <- runCor(as.numeric(index(stockdata)), Cl(stockdata))
-  buy <- short_sma - long_sma > 0
   
   out <- buy[NROW(buy),] && (!{buy[NROW(buy)-1,]}) && run_corr > 0
   
   return(list(
-    value = short_sma - long_sma,
+    value = short_ema - long_ema,
     buy = buy,
     cor = run_corr,
     golden_cross = out
@@ -60,12 +59,12 @@ perform_ema_screen <- function( symbol ) {
   df <- na.fill(getSymbols(symbol, auto.assign = FALSE), 0)
   # df <- eval(parse(text = symbol))
   
-  out <- NA
+  out <- logical()
   if( NROW(df) > 200 ) {
-    screen_output <- sma_screen(df)
+    screen_output <- ema_screen(df)
     out <- screen_output$golden_cross
   }
-  
+    
   names(out) <- symbol
   out
   
@@ -75,20 +74,20 @@ perform_ema_screen <- function( symbol ) {
 
 
 # stockdata_dt <- as.data.table(HMY)
-back_test_sma <- function( stockdata, short = 50, long = 200, cor_period = 20 ){
+back_test_ema <- function( stockdata, short = 50, long = 200, cor_period = 20 ){
   
   stockdata_dt <- as.data.table(stockdata)
   
   stockdata_dt[, runcorr := runCor(.I, .SD, n = cor_period, use = "complete.obs"), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
   
-  stockdata_dt[, SMAShort := lapply(.SD, SMA, n = short), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
-  stockdata_dt[, SMALong := lapply(.SD, SMA, n = long), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
-  stockdata_dt[, SMADIFF := SMAShort - SMALong]
-  stockdata_dt[, SMAShortaboveLong := SMADIFF > 0] # the short time period MA is above the longer time period MA
+  stockdata_dt[, EMAShort := lapply(.SD, EMA, n = short), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
+  stockdata_dt[, EMALong := lapply(.SD, EMA, n = long), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
+  stockdata_dt[, EMADIFF := EMAShort - EMALong]
+  stockdata_dt[, EMAShortaboveLong := EMADIFF > 0] # the short time period MA is above the longer time period MA
   
-  stockdata_dt[, SMAShortaboveLonglag := lag(SMAShortaboveLong)] # use to make sure we get the first instance 
-  stockdata_dt[, SMAShortaboveLonglead := lead(SMAShortaboveLong)]
-  stockdata_dt[, buy := SMAShortaboveLong & !{SMAShortaboveLonglag} & runcorr > 0]
+  stockdata_dt[, EMAShortaboveLonglag := lag(EMAShortaboveLong)] # use to make sure we get the first instance 
+  stockdata_dt[, EMAShortaboveLonglead := lead(EMAShortaboveLong)]
+  stockdata_dt[, buy := EMAShortaboveLong & !{EMAShortaboveLonglag} & runcorr > 0]
   
   stockdata_dt[, OneWeek := lapply(.SD, lead, 5), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
   stockdata_dt[, TwoWeek := lapply(.SD, lead, 10), .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
@@ -99,7 +98,7 @@ back_test_sma <- function( stockdata, short = 50, long = 200, cor_period = 20 ){
   stockdata_dt[, TwoWeekChange := TwoWeek / .SD, .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
   stockdata_dt[, ThreeWeekChange := ThreeWeek / .SD, .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
   stockdata_dt[, FourWeekChange := FourWeek / .SD, .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
-
+  
   stockdata_dt[, OneWeekMin := lapply(.SD, runMin, n = 5), .SDcols = grep("Low", colnames(stockdata_dt), value = TRUE)]
   stockdata_dt[, OneWeekMin := lead(OneWeekMin, n = 5)]
   stockdata_dt[, OneWeekMaxLoss := OneWeekMin / .SD, .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]  
@@ -115,16 +114,16 @@ back_test_sma <- function( stockdata, short = 50, long = 200, cor_period = 20 ){
   stockdata_dt[, FourWeekMin := lapply(.SD, runMin, n = 20), .SDcols = grep("Low", colnames(stockdata_dt), value = TRUE)]
   stockdata_dt[, FourWeekMin := lead(FourWeekMin, n = 20)]
   stockdata_dt[, FourWeekMaxLoss := FourWeekMin / .SD, .SDcols = grep("Close", colnames(stockdata_dt), value = TRUE)]
-
+  
   stockdata_dt[, percent_change := TwoWeekChange]
   stockdata_dt[TwoWeekMaxLoss < 0.95, percent_change := 0.95]
-
+  
   list(data = stockdata_dt,
        percent_change = stockdata_dt[buy == "TRUE", percent_change],
        cum_percent_change = Reduce("*", stockdata_dt[buy == "TRUE", percent_change]),
        buy = last(stockdata_dt$buy)
   )
-
+  
 }
 
 

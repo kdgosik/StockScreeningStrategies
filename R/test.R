@@ -11,6 +11,7 @@ rm(list = ls()); gc(reset = TRUE)
 source("R/screen-pattern-match.R")
 source("R/screen-changepoint.R")
 source("R/screen-sma.R")
+source("R/screen-ema.R")
 source("R/utils.R")
 
 
@@ -50,9 +51,10 @@ win <- 60
 plot_data <- data.frame(date = c(index(out$data)[(end - (win - 1)) : end], seq(index(out$data)[end],index(out$data)[end]+test_points, by = 1)),
                         price = c(as.numeric(Cl(out$data)[(end - (win - 1)) : end]), test_data$price),
                         pattern1 = as.numeric(Cl(out$data)[out$index[1]:(out$index[1] + win + test_points)]),
-                        pattern2 = as.numeric(Cl(out$data)[out$index[5]:(out$index[5] + win + test_points)]),
-                        pattern3 = as.numeric(Cl(out$data)[out$index[7]:(out$index[7] + win + test_points)]),
-                        pattern4 = as.numeric(Cl(out$data)[out$index[9]:(out$index[9] + win + test_points)]))
+                        pattern2 = as.numeric(Cl(out$data)[out$index[2]:(out$index[2] + win + test_points)]),
+                        pattern3 = as.numeric(Cl(out$data)[out$index[3]:(out$index[3] + win + test_points)]),
+                        pattern4 = as.numeric(Cl(out$data)[out$index[4]:(out$index[4] + win + test_points)]),
+                        pattern5 = as.numeric(Cl(out$data)[out$index[5]:(out$index[5] + win + test_points)]))
 
 
 
@@ -62,6 +64,7 @@ plot_data <- plot_data %>%
          pattern2 = scale(pattern2),
          pattern3 = scale(pattern3),
          pattern4 = scale(pattern4),
+         pattern5 = scale(pattern5),
          color = ifelse(date >= min(test_data$date), "red","black"))
 
 
@@ -71,25 +74,70 @@ ggplot(plot_data, aes(x = date, y = price, color = I(color))) +
   geom_smooth(aes(x = date, y = pattern1), color = "darkgreen", span = 0.5) +
   geom_smooth(aes(x = date, y = pattern2), color = "darkblue", span = 0.5) +
   geom_smooth(aes(x = date, y = pattern3), color = "darkorange", span = 0.5) +
-  geom_smooth(aes(x = date, y = pattern4), color = "darkred", span = 0.5)
-
+  geom_smooth(aes(x = date, y = pattern4), color = "darkred", span = 0.5) + 
+  geom_smooth(aes(x = date, y = pattern5), color = "darkred", span = 0.5) 
 
 
 cor(plot_data[plot_data$color=="black", c('price','pattern1','pattern2','pattern3','pattern4')])
 
 
 
+pattern_screen_out <- sapply(stock_list, function(l) {
+  try({
+    pattern_match_screen(na.omit(eval(parse(text = l))),
+                         window_length = 60,
+                         comparisons = 10,
+                         method = "percent",  # percent, poly, legendre, ns, loess
+                         degree = 5,
+                         df = 5,
+                         span = 0.75 
+                         )$avg_percent_change > 1.2
+  })
+})
+
+table(pattern_screen_out)
 
 ## Testing: SMA ############################################################
 
-getSymbols(stocks$Symbol[600:NROW(stocks)])
+getSymbols(stocks$Symbol[101:NROW(stocks)])
 
-stock_list <- grep("[A-Z]{3}", ls(), value = TRUE)
+stock_list <- grep("[A-Z]{2,3}", ls(), value = TRUE)
 
 # sma_screen_out <- sapply(stock_list, function(l) try(perform_sma_screen(l)))
 # table(sma_screen_out)
 
-sma_screen_out <- sapply(stock_list, function(l) try(back_test_sma(na.omit(eval(parse(text=l))))$buy))
+sma_screen_out <- sapply(stock_list, function(l) {
+  
+  try({
+    back_test_sma(na.omit(eval(parse(text=l))),
+                  short = 20,
+                  long = 100,
+                  cor_period = 10
+                  )$buy
+    })
+  
+})
+
 table(sma_screen_out)
+
+rm(list = stock_list)
+
+
+# SEAC
+## Testing: EMA ############################################################
+
+ema_screen_out <- sapply(stock_list, function(l) {
+  
+  try({
+    back_test_ema(na.omit(eval(parse(text=l))),
+                  short = 20,
+                  long = 100,
+                  cor_period = 10
+    )$buy
+  })
+  
+})
+
+table(ema_screen_out)
 
 rm(list = stock_list)

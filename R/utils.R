@@ -7,7 +7,7 @@ library(dplyr)
 
 stocks <- TTR::stockSymbols() %>%
   as.data.frame() %>%
-  filter(LastSale > 1, LastSale < 20)
+  filter(LastSale > 2, LastSale < 20)
 
 
 #' two_week_return
@@ -76,3 +76,25 @@ graph_events <- function( screen_list ) {
     dygraphs::dyCandlestick() %>%
     dygraphs::dyEvent(events)
 }
+
+
+
+graph_with_ribbon <- function( stockdata ) {
+  
+  stockdata$EMA50 <- EMA(Cl(stockdata), n = 50)
+  stockdata$EMA200 <- EMA(Cl(stockdata), n = 200)
+  
+  difference <- stockdata$EMA50 - stockdata$EMA200
+  decreasing <- which(difference < 0)
+  increasing <- which(difference > 0)
+  
+  ribbonData <- rep(0, nrow(stockdata))
+  ribbonData[decreasing] <- 0.5
+  ribbonData[increasing] <- 1
+  
+  dygraph(stockdata[,c(1,2,3,4,7,8)]) %>%
+    dyCandlestick() %>%
+    dyRibbon(data = ribbonData, top = 1, bottom = 0.02)
+  
+}
+
