@@ -1,4 +1,4 @@
-FROM rocker/shiny:latest
+FROM rocker/tidyverse:latest
 MAINTAINER kdgosik@gmail.com
 
 ## Install R packages

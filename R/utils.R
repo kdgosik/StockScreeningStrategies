@@ -7,7 +7,7 @@ library(dplyr)
 
 stocks <- TTR::stockSymbols() %>%
   as.data.frame() %>%
-  filter(LastSale > 2, LastSale < 20)
+  filter(LastSale > 2, LastSale < 10)
 
 
 #' two_week_return

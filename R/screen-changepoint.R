@@ -23,8 +23,12 @@ library(pracma)
 
 ## Change Point ########
 
-changepoint_screen <- function( stockdata, cutoff = 0.9 ) {
+changepoint_screen <- function( symbol, cutoff = 0.9, test_points = 0 ) {
   
+  ## using quantmod API to get the stock data
+  stockdata <- getSymbols(symbol, auto.assign = FALSE)[paste0("/", Sys.Date() - test_points)]
+  
+  ## check to make sure data is in proper format
   if (xts::xtsible(stockdata)) {
     if (!xts::is.xts(stockdata))
       data <- xts::as.xts(stockdata)
@@ -51,4 +55,5 @@ changepoint_screen <- function( stockdata, cutoff = 0.9 ) {
   
   list(data = cbind(stockdata, bcp_post),
        events = bcp_events)
+  
 }

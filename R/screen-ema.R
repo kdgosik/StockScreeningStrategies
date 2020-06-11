@@ -21,8 +21,15 @@
 
 
 
-ema_screen <- function( stockdata, short = 50, long = 200 ) {
+ema_screen <- function( symbol, 
+                        short = 50, 
+                        long = 200,
+                        test_points = 0 ) {
   
+  ## using quantmod API to get the stock data
+  stockdata <- getSymbols(symbol, auto.assign = FALSE)[paste0("/", Sys.Date() - test_points)]
+  
+  ## check to make sure data is in proper format
   if (xts::xtsible(stockdata)) {
     if (!xts::is.xts(stockdata))
       data <- xts::as.xts(stockdata)
@@ -54,6 +61,8 @@ ema_screen <- function( stockdata, short = 50, long = 200 ) {
 }
 
 
+
+## TODO: Needs adjusted for screen function above
 perform_ema_screen <- function( symbol ) {
   
   df <- na.fill(getSymbols(symbol, auto.assign = FALSE), 0)

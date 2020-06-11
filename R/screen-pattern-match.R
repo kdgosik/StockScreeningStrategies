@@ -1,8 +1,6 @@
 #' Lengendre Polynomial Function
 #'
-#' This function will take in an xts dataset and conducat a bayesian change point analysis (from the bcp package)
-#' on the daily returns of the stock price.  It then returns the data with the appended posterior probabilities of a change point
-#' occuring and also a list of the dates of the events where the probability is above the cutoff value given.
+#' This function is for calculating the legendre polynomial function for a given order.
 #'
 #' @param t Time period to use
 #' @param np.order Order of the Polynomial to calculate
@@ -57,13 +55,15 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 
 
 
-#' Natural Splines Stock Screening
+#' Pattern Match Stock Screening
 #'
-#' This function will take in an xts dataset and conducat a bayesian change point analysis (from the bcp package)
-#' on the daily returns of the stock price.  It then returns the data with the appended posterior probabilities of a change point
-#' occuring and also a list of the dates of the events where the probability is above the cutoff value given.
-#'
-#' @param stockdata Either time series data or numeric data. For time series, this must be an xts object or an object which is convertible to xts. For numeric data, this must be a named list or data frame, where the first element/column provides x-axis values and all subsequent elements/columns provide one or more series of y-values
+#' This function intakes a ticker symbol and perform a pattern matching of the historical
+#' trend of the data that matches closest to the current time period back to a certain window
+#' length.  For example, if the window=60, it will take the last 60 days of trading and find
+#' the closest 60 day time period in the historic data and use that to see what happens in the
+#' future price action.  
+#' 
+#' @param symbol Stock symbol to use for the screen
 #' @param window_length
 #' @param comparisons
 #' @param method
@@ -73,20 +73,25 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 #' @return a summary of the linear model returned after the selection procedure
 #' @author Kirk Gosik kdgosik@gmail.com
 #' @details
-#' Conducts a change point analysis on the daily returns of a stock price.
+#' Conducts a pattern matching stock screening strategy
 #' @export
 #' @importFrom magrittr `%>%`
 #' @importFrom magrittr `%$%`
 
 
-pattern_match_screen <- function( stockdata,
+pattern_match_screen <- function( symbol,
                                   window_length = 60,
                                   comparisons = 10,
                                   method = "legendre",
                                   degree = 5,
                                   df = 5,
-                                  span = 0.75 ) {
+                                  span = 0.75,
+                                  test_points = 0 ) {
   
+  ## using quantmod API to get the stock data
+  stockdata <- getSymbols(symbol, auto.assign = FALSE)[paste0("/", Sys.Date() - test_points)]
+  
+  ## check to make sure data is in proper format
   if (xts::xtsible(stockdata)) {
     if (!xts::is.xts(stockdata))
       data <- xts::as.xts(stockdata)
@@ -101,14 +106,17 @@ pattern_match_screen <- function( stockdata,
     stop("Unsupported type passed to argument 'data'.")
   }
   
+  ## calculates the average of the high and low price for the day
   vec <- as.numeric((Hi(stockdata) + Lo(stockdata))/2)
   
   end <- length(vec)
   win <- window_length
   
+  ## current scaled price values upto the beginning of the windowed period
   current_y <- as.vector(scale(vec[(end - (win - 1)) : end]))
   x <- seq(1, win)
   
+  ## uses current_y to make predictions using specified method
   current_y_pred <- switch(
     EXPR = method,
     percent = current_y / (dplyr::last(current_y)),
@@ -118,7 +126,7 @@ pattern_match_screen <- function( stockdata,
     loess = predict(loess(current_y ~ x, span = span))
     )
   
-  ## Calculate RSE from current to predicted
+  ## Calculate RSE from current vs predicted
   norm_val <- NULL
   for( i in 1 : (end - (2 * win)) ) {
     check_y <- as.vector(scale(vec[i : (i + (win - 1))]))
@@ -131,12 +139,15 @@ pattern_match_screen <- function( stockdata,
     
     norm_val[i] <- sum((current_y_pred - check_y_pred)^2)^(1/2)
   }
+  
   ## get indexes of the top n comparisons 
   idx <- which(norm_val <= sort(norm_val)[comparisons])
   
+  ## returns data and summarys statistics on the screening procedure
   list(data = stockdata,
        percent_change = vec[(idx + (win + 20))] / vec[idx],
        index = idx,
        avg_percent_change = harmmean(vec[(idx + (win + 20))] / vec[idx]),
        proportion_up = mean(as.numeric(vec[(idx + (win + 20))] / vec[idx] > 1)))
+  
 }
