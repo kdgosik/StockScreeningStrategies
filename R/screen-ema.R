@@ -52,6 +52,7 @@ ema_screen <- function( symbol,
   out <- buy[NROW(buy),] && (!{buy[NROW(buy)-1,]}) && run_corr > 0
   
   return(list(
+    data  = stockdata,
     value = short_ema - long_ema,
     buy = buy,
     cor = run_corr,

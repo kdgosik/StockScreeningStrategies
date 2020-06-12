@@ -23,14 +23,16 @@ source("R/screen-pattern-match.R")
 ## get stocks with sale price between 1 and 5 dollars
 stocks <- TTR::stockSymbols() %>%
   as.data.frame() %>%
-  filter(LastSale > 1, LastSale < 5, IPOyear < 2020)
+  dplyr::filter(LastSale > 1, LastSale < 5, IPOyear < 2020)
 
 
 ## run screen
-pattern_screen_out <- sapply(stocks$Symbol, function(l) {
+pattern_screen_out <- sapply(stocks$Symbol[1:20], function(l) {
+  
+  stockdata <- getSymbols(l, auto.assign = FALSE)
   
   tryCatch({
-    pattern_match_screen(l,
+    pattern_match_screen(stockdata = stockdata,
                          window_length = 60,
                          comparisons = 10,
                          method = "percent",  # percent, poly, legendre, ns, loess

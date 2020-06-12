@@ -79,7 +79,7 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 #' @importFrom magrittr `%$%`
 
 
-pattern_match_screen <- function( symbol,
+pattern_match_screen <- function( stockdata,
                                   window_length = 60,
                                   comparisons = 10,
                                   method = "legendre",
@@ -88,9 +88,9 @@ pattern_match_screen <- function( symbol,
                                   span = 0.75,
                                   test_points = 0 ) {
   
-  ## using quantmod API to get the stock data
-  stockdata <- getSymbols(symbol, auto.assign = FALSE)[paste0("/", Sys.Date() - test_points)]
-  
+  # ## using quantmod API to get the stock data
+  # stockdata <- getSymbols(symbol, auto.assign = FALSE)[paste0("/", Sys.Date() - test_points)]
+  # 
   ## check to make sure data is in proper format
   if (xts::xtsible(stockdata)) {
     if (!xts::is.xts(stockdata))
