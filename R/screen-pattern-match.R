@@ -79,8 +79,9 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 #' @importFrom magrittr `%$%`
 
 
-pattern_match_screen <- function( stockdata,
+screen_pattern_match <- function( stockdata,
                                   window_length = 60,
+                                  hold_days = 5,
                                   comparisons = 10,
                                   method = "legendre",
                                   degree = 5,
@@ -145,9 +146,9 @@ pattern_match_screen <- function( stockdata,
   
   ## returns data and summarys statistics on the screening procedure
   list(data = stockdata,
-       percent_change = vec[(idx + (win + 20))] / vec[idx],
+       percent_change = vec[(idx + (win + hold_days))] / vec[idx],
        index = idx,
-       avg_percent_change = harmmean(vec[(idx + (win + 20))] / vec[idx]),
-       proportion_up = mean(as.numeric(vec[(idx + (win + 20))] / vec[idx] > 1)))
+       avg_percent_change = harmmean(vec[(idx + (win + hold_days))] / vec[idx]),
+       proportion_up = mean(as.numeric(vec[(idx + (win + hold_days))] / vec[idx] > 1)))
   
 }
