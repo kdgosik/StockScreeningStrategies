@@ -1,0 +1,163 @@
+---
+title: "backtest-summary"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(googlesheets4)
+library(tidyverse)
+library(data.table)
+library(magrittr)
+library(quantmod)
+library(TTR)
+library(plotly)
+library(igraph)
+library(visNetwork)
+```
+
+
+## helpers.R
+
+```{r}
+to_avg <- function(x) {
+  sapply(x, function(y) mean(as.numeric(unlist(strsplit(y, ";")))), USE.NAMES = FALSE)
+}
+
+
+to_prop <- function(x) {
+  sapply(x, function(y) mean(as.numeric(unlist(strsplit(y, ";"))) > 1), USE.NAMES = FALSE)
+}
+
+
+unique_patterns <- function(x) {
+  
+  sapply(x, function(y) {
+    
+    idx <- as.numeric(unlist(strsplit(y, ";")))
+    sum(idx[2:10] - idx[1:9] > 1) + 1
+    
+  }, USE.NAMES = FALSE)
+
+}
+
+```
+
+
+## R Markdown
+
+```{r}
+data_path <- "~/Documents/projects/StockScreeningStrategies/data/"
+
+
+backtest <- read_csv(paste0(data_path, "backtest-screen-pattern-match-old.csv")) %>%
+  filter(monday_open > 0) %>%
+  mutate(percent_change = friday_close / monday_open)
+
+
+backtest <- read_csv(paste0(data_path, "backtest-screen-pattern-match.csv")) %>%
+  filter(monday_open > 0) %>%
+  mutate(percent_change = friday_close / monday_open,
+         unique_patterns = unique_patterns(index))
+
+
+
+
+```
+
+
+```{r}
+backtest <- read_csv(paste0(data_path, "backtest-screen-pattern-match-old.csv")) %>%
+  filter(monday_open > 0, friday_close > 0) %>%
+  mutate(percent_change = friday_close / monday_open)
+
+
+topn <- backtest %>%
+      # rename(screen_change = ends_with(match = input$metric)) %>% ## screen_change
+      # mutate(screen_avg_change = to_avg( screen_change ),  ## percent_change_present_hold
+      #        screen_prop_up = to_prop( screen_change )) %>%
+      filter(screen_prop_up  == 1,
+             screen_type == "ns", ## input$screen_type, 
+             screen_avg_change > 1.1, ## input$screen_avg_change,
+             monday_open < 1e6) %>% ## input$price_cutoff) %>%
+      group_by(buy_date) %>% 
+      arrange(-screen_avg_change) %>% 
+      # slice_head(n = 1) %>% ## input$topn) %>%
+      top_n(n = 1) %>% ## input$topn
+      group_by(buy_date) %>% 
+      summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+      filter(return > 0) %>% 
+      ungroup %>%
+      mutate(cumprod = round(cumprod(return), 4))
+```
+
+
+
+
+```{r data_sum}
+
+topn <- backtest %>% 
+  filter(
+    friday_close > 0,
+    screen_type == "percent",
+    unique_patterns >= 3  ## set unique patterns number
+    ) %>%
+  mutate(
+    screen_avg_change = to_avg(percent_change_present_hold),
+    screen_prop_up = to_prop(percent_change_present_hold)
+    ) %>%
+  filter(
+    screen_avg_change > 1,
+    screen_prop_up == 1
+    ) %>%
+  group_by(buy_date) %>% 
+  arrange(-screen_avg_change) %>%
+  select(buy_date, sell_date, symbol, monday_open, friday_close, 
+         percent_change, screen_avg_change, screen_prop_up, unique_patterns) %>%
+  slice_head(n = 1)
+
+
+
+dat <- topn %>% 
+  # group_by(buy_date) %>% 
+  summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+  filter(return > 0) %>% 
+  ungroup %>%
+  mutate(cumprod = round(cumprod(return), 3))
+
+```
+
+## Including Plots
+
+```{r}
+firstweek <- backtest %>% 
+  ## filter(buy_date == '2019-01-07') %>%
+  filter(screen_type == 'percent', percent_change < 5) %>%  
+  mutate(winner = as.numeric(percent_change > 1.05),
+         screen_avg_change = to_avg(percent_change_present_hold),
+         screen_prop_up = to_prop(percent_change_present_hold))
+ 
+
+p1 <-  ggplot(firstweek, aes(screen_avg_change, screen_prop_up, color = winner)) + 
+  geom_point() +
+  scale_color_gradient2(low = "red", high = "blue", midpoint = 0.5) + 
+  # scale_color_gradient(low = "red", high = "blue") + 
+  xlim(0,10)
+  
+  
+```
+
+
+
+```{r}
+
+topn %>% ungroup %>% ggplot(., aes(x = screen_avg_change, y = percent_change)) + geom_point()
+
+```
+
+
+```{r pressure, echo=FALSE}
+by_type <- ggplot(backtest, aes(x = buy_date, y = percent_change, color = screen_type)) + geom_point()
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

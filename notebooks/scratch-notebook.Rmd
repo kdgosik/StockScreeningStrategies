@@ -1,0 +1,115 @@
+---
+title: "scratch-notebook"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(googlesheets4)
+library(tidyverse)
+library(data.table)
+library(magrittr)
+library(quantmod)
+library(TTR)
+library(plotly)
+library(igraph)
+library(visNetwork)
+
+
+
+data_path <- "~/Documents/projects/StockScreeningStrategies/data/"
+```
+
+
+## helpers.R
+
+```{r}
+to_avg <- function(x) {
+  sapply(x, function(y) mean(as.numeric(unlist(strsplit(y, ";")))), USE.NAMES = FALSE)
+}
+
+
+to_prop <- function(x) {
+  sapply(x, function(y) mean(as.numeric(unlist(strsplit(y, ";"))) > 1), USE.NAMES = FALSE)
+}
+
+
+unique_patterns <- function(x) {
+  
+  sapply(x, function(y) {
+    
+    idx <- as.numeric(unlist(strsplit(y, ";")))
+    sum(idx[2:10] - idx[1:9] > 1) + 1
+    
+  }, USE.NAMES = FALSE)
+
+}
+
+```
+
+
+
+## Winning Strategy with old Back test
+
+```{r}
+
+backtest_old <- read_csv(paste0(data_path, "backtest-screen-pattern-match-old.csv")) %>%
+  filter(monday_open > 0, friday_close > 0) %>%
+  mutate(percent_change = friday_close / monday_open)
+
+
+backtest_old_filter <- backtest_old %>% 
+  filter(buy_date < "2019-03-26") %>%
+  select(buy_date, sell_date, symbol, monday_open, friday_close, screen_type, 
+         screen_avg_change, screen_prop_up, percent_change)
+
+topn_old <- backtest_old %>%
+      filter(screen_prop_up  == 1,
+             screen_type == "ns", ## input$screen_type, 
+             screen_avg_change > 1.1, ## input$screen_avg_change,
+             monday_open < 1e6) %>% ## input$price_cutoff) %>%
+      group_by(buy_date) %>% 
+      arrange(-screen_avg_change) %>% 
+      # slice_head(n = 1) %>% ## input$topn) %>% THIS BREAKS EVERYTHING
+      top_n(n = 1) %>% ## input$topn
+      group_by(buy_date) %>% 
+      summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+      filter(return > 0) %>% 
+      ungroup %>%
+      mutate(cumprod = round(cumprod(return), 4))
+
+old_backtest_symbols <- unique(backtest_old_filter$symbol)
+```
+
+
+## Replicate with New Backtest Data
+
+```{r}
+
+backtest <- read_csv(paste0(data_path, "backtest-screen-pattern-match.csv")) %>%
+  filter(monday_open > 0, friday_close > 0) %>%
+  mutate(percent_change = friday_close / monday_open) %>%
+  # filter(symbol %in% old_backtest_symbols) %>%
+  mutate(screen_avg_change = to_avg( percent_change_window_hold ),  ## percent_change_present_hold
+         screen_prop_up = to_prop( percent_change_window_hold )) %>%
+  select(buy_date, sell_date, symbol, monday_open, friday_close, screen_type, 
+         screen_avg_change, screen_prop_up, percent_change)
+
+
+topn <- backtest %>%
+  filter(screen_prop_up  == 1,
+         screen_type == "ns", ## input$screen_type, 
+         screen_avg_change > 1.1, ## input$screen_avg_change,
+         monday_open < 1e6) %>% ## input$price_cutoff) %>%
+  group_by(buy_date) %>% 
+  arrange(-screen_avg_change) %>% 
+  # slice_head(n = 1) %>% ## input$topn) %>%
+  top_n(n = 1) %>% ## input$topn
+  group_by(buy_date) %>% 
+  summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+  filter(return > 0) %>% 
+  ungroup %>%
+  mutate(cumprod = round(cumprod(return), 4))
+
+```

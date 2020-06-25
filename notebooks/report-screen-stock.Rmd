@@ -1,0 +1,344 @@
+---
+title: "screen-stock-report"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+params:
+  symbol: "GOOG"
+  window_length: 60
+  look_ahead_window: 60
+  hold_days: 5
+---
+
+## Setup
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magrittr)
+library(quantmod)
+library(TTR)
+library(dygraphs)
+
+source("/home/kirk/Documents/projects/StockScreeningStrategies/src/R/screen-pattern-match.R")
+
+
+## utils.R 
+rescale_to_current <- function(plot_data, 
+                               price_col = "price", 
+                               price_scale_col = "price_scale", 
+                               pattern_scale_col) {
+  
+  fit1 <- lm(as.formula(paste0(price_col, "~", price_scale_col)), data = plot_data)
+  newdata <- data.frame(plot_data[, pattern_scale_col])
+  colnames(newdata) <- price_scale_col
+  
+  out <- predict(fit1, newdata = newdata)
+  out
+  
+}
+```
+
+## Run Screen
+
+```{r run_screen, echo = FALSE}
+
+
+stockdata <- getSymbols(params$symbol, auto.assign = FALSE)
+
+
+window_length <- params$window_length
+look_ahead_window <- params$look_ahead_window
+hold_days <- params$hold_days
+
+
+screen_out <- screen_pattern_match(stockdata = stockdata,
+                                   window_length = window_length,
+                                   look_ahead_window = look_ahead_window,
+                                   hold_days = hold_days,
+                                   comparisons = 10,
+                                   method = "ns",
+                                   degree = 5,
+                                   df = 5,
+                                   span = 0.75)
+```
+
+## Creating Plot Data
+
+
+```{r create_plot_data, echo = FALSE}
+end <- NROW(screen_out$data)
+
+
+plot_data <- data.frame(date = index(screen_out$data)[(end - (window_length - 1)) : end],
+                        price = as.numeric(Cl(screen_out$data)[(end - (window_length - 1)) : end]),
+                        pattern1 = as.numeric(Cl(screen_out$data)[screen_out$index[1]:(screen_out$index[1] + (window_length - 1))]),
+                        pattern2 = as.numeric(Cl(screen_out$data)[screen_out$index[2]:(screen_out$index[2] + (window_length - 1))]),
+                        pattern3 = as.numeric(Cl(screen_out$data)[screen_out$index[3]:(screen_out$index[3] + (window_length - 1))]),
+                        pattern4 = as.numeric(Cl(screen_out$data)[screen_out$index[4]:(screen_out$index[4] + (window_length - 1))]),
+                        pattern5 = as.numeric(Cl(screen_out$data)[screen_out$index[5]:(screen_out$index[5] + (window_length - 1))]),
+                        pattern6 = as.numeric(Cl(screen_out$data)[screen_out$index[6]:(screen_out$index[6] + (window_length - 1))]),
+                        pattern7 = as.numeric(Cl(screen_out$data)[screen_out$index[7]:(screen_out$index[7] + (window_length - 1))]),
+                        pattern8 = as.numeric(Cl(screen_out$data)[screen_out$index[8]:(screen_out$index[8] + (window_length - 1))]),
+                        pattern9 = as.numeric(Cl(screen_out$data)[screen_out$index[9]:(screen_out$index[9] + (window_length - 1))]),
+                        pattern10 = as.numeric(Cl(screen_out$data)[screen_out$index[10]:(screen_out$index[10] + (window_length - 1))])
+                        )
+
+
+pred_data <- data.frame(date = index(screen_out$data)[end] + 1:(look_ahead_window + hold_days),
+                        price = NA,
+                        pattern1 = as.numeric(Cl(screen_out$data)[(screen_out$index[1] + window_length):(screen_out$index[1] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern2 = as.numeric(Cl(screen_out$data)[(screen_out$index[2] + window_length):(screen_out$index[2] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern3 = as.numeric(Cl(screen_out$data)[(screen_out$index[3] + window_length):(screen_out$index[3] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern4 = as.numeric(Cl(screen_out$data)[(screen_out$index[4] + window_length):(screen_out$index[4] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern5 = as.numeric(Cl(screen_out$data)[(screen_out$index[5] + window_length):(screen_out$index[5] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern6 = as.numeric(Cl(screen_out$data)[(screen_out$index[6] + window_length):(screen_out$index[6] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern7 = as.numeric(Cl(screen_out$data)[(screen_out$index[7] + window_length):(screen_out$index[7] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern8 = as.numeric(Cl(screen_out$data)[(screen_out$index[8] + window_length):(screen_out$index[8] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern9 = as.numeric(Cl(screen_out$data)[(screen_out$index[9] + window_length):(screen_out$index[9] + (window_length + look_ahead_window + hold_days - 1))]),
+                        pattern10 = as.numeric(Cl(screen_out$data)[(screen_out$index[10] + window_length):(screen_out$index[10] + (window_length + look_ahead_window + hold_days - 1))])
+                             
+                             
+)
+
+plot_data <- rbind(plot_data, pred_data)
+
+plot_data <- plot_data %>%
+  mutate(
+    price_scale = as.numeric(scale(price)),
+    pattern1_scale = as.numeric(scale(pattern1)),
+    pattern2_scale = as.numeric(scale(pattern2)),
+    pattern3_scale = as.numeric(scale(pattern3)),
+    pattern4_scale = as.numeric(scale(pattern4)),
+    pattern5_scale = as.numeric(scale(pattern5)),
+    pattern6_scale = as.numeric(scale(pattern6)),
+    pattern7_scale = as.numeric(scale(pattern7)),
+    pattern8_scale = as.numeric(scale(pattern8)),
+    pattern9_scale = as.numeric(scale(pattern9)),
+    pattern10_scale = as.numeric(scale(pattern10))
+  )
+
+plot_data <- plot_data %>%
+  mutate(
+         pattern1_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern1_scale"),
+         pattern2_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern2_scale"),
+         pattern3_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern3_scale"),
+         pattern4_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern4_scale"),
+         pattern5_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern5_scale"),
+         pattern6_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern6_scale"),
+         pattern7_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern7_scale"),
+         pattern8_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern8_scale"),
+         pattern9_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern9_scale"),
+         pattern10_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern10_scale")
+  )
+
+
+```
+
+
+
+## Candle Stick Graph
+
+```{r dygraph_plot, echo = FALSE}
+OHLC(stockdata) %>%
+  dygraph() %>%
+  dyCandlestick
+```
+
+
+## Pattern Compare {.tabset}
+
+```{r all_patterns_ggplot,  echo = FALSE, eval = FALSE}
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern1_rescale), color = "darkgreen", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern2_rescale), color = "darkblue", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern3_rescale), color = "darkorange", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern4_rescale), color = "darkred", span = 0.5) + 
+  geom_smooth(aes(x = date, y = pattern5_rescale), color = "darkgrey", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern6_rescale), color = "lightgreen", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern7_rescale), color = "lightblue", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern8_rescale), color = "orange", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern9_rescale), color = "pink", span = 0.5) +
+  geom_smooth(aes(x = date, y = pattern10_rescale), color = "lightgrey", span = 0.5)
+```
+
+
+### Pattern 1
+
+```{r pattern1_ggplot, echo = FALSE, warning = FALSE}
+idx <- 1
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 2
+
+```{r pattern2_ggplot, echo = FALSE, warning = FALSE}
+idx <- 2
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 3
+
+```{r pattern3_ggplot, echo = FALSE, warning = FALSE}
+idx <- 3
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 4
+
+```{r pattern4_ggplot, echo = FALSE, warning = FALSE}
+idx <- 4
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 5
+
+```{r pattern5_ggplot, echo = FALSE, warning = FALSE}
+idx <- 5
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 6
+
+```{r pattern6_ggplot, echo = FALSE, warning = FALSE}
+idx <- 6
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+### Pattern 7
+
+```{r pattern7_ggplot, echo = FALSE, warning = FALSE}
+idx <- 7
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+### Pattern 8
+
+```{r pattern8_ggplot, echo = FALSE, warning = FALSE}
+idx <- 8
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 9
+
+```{r pattern9_ggplot, echo = FALSE, warning = FALSE}
+idx <- 9
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
+
+
+### Pattern 10
+
+```{r pattern10_ggplot, echo = FALSE, warning = FALSE}
+idx <- 10
+
+pattern_period <- paste0(
+  index(screen_out$data[screen_out$index[idx]:(screen_out$index[idx] + (window_length - 1))])[c(1,60)], 
+  collapse=" to ")
+
+ggplot(plot_data, aes(x = date, y = price)) +
+  geom_point() +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  labs(title = pattern_period)
+
+```
+
