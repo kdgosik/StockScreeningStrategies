@@ -21,24 +21,24 @@ library(magrittr)
 library(quantmod)
 library(TTR)
 library(dygraphs)
+library(knitr)
+library(lubridate)
 
 source("/home/kirk/Documents/projects/StockScreeningStrategies/src/R/screen-pattern-match.R")
 
-
-## utils.R 
-rescale_to_current <- function(plot_data, 
-                               price_col = "price", 
-                               price_scale_col = "price_scale", 
-                               pattern_scale_col) {
+my_ggplot <- function(plot_data, pattern) {
   
-  fit1 <- lm(as.formula(paste0(price_col, "~", price_scale_col)), data = plot_data)
-  newdata <- data.frame(plot_data[, pattern_scale_col])
-  colnames(newdata) <- price_scale_col
-  
-  out <- predict(fit1, newdata = newdata)
-  out
+  ggplot(plot_data, aes(date, price)) + 
+    geom_point() + 
+    geom_line() + 
+    geom_smooth() + 
+    geom_point(aes_string("date", pattern), color = "red") + 
+    geom_line(aes_string("date", pattern), color = "red") +
+    geom_smooth(aes_string("date", pattern), color = "darkgreen") + 
+    labs(title = pattern_period)
   
 }
+
 ```
 
 ## Run Screen
@@ -59,7 +59,7 @@ screen_out <- screen_pattern_match(stockdata = stockdata,
                                    look_ahead_window = look_ahead_window,
                                    hold_days = hold_days,
                                    comparisons = 10,
-                                   method = "ns",
+                                   method = "percent",
                                    degree = 5,
                                    df = 5,
                                    span = 0.75)
@@ -87,7 +87,7 @@ plot_data <- data.frame(date = index(screen_out$data)[(end - (window_length - 1)
                         )
 
 
-pred_data <- data.frame(date = index(screen_out$data)[end] + 1:(look_ahead_window + hold_days),
+pred_data <- data.frame(date = (index(screen_out$data)[end]+1:100)[wday(index(screen_out$data)[end]+1:(look_ahead_window+hold_days))%in%2:6][1:(look_ahead_window+hold_days)],
                         price = NA,
                         pattern1 = as.numeric(Cl(screen_out$data)[(screen_out$index[1] + window_length):(screen_out$index[1] + (window_length + look_ahead_window + hold_days - 1))]),
                         pattern2 = as.numeric(Cl(screen_out$data)[(screen_out$index[2] + window_length):(screen_out$index[2] + (window_length + look_ahead_window + hold_days - 1))]),
@@ -103,38 +103,24 @@ pred_data <- data.frame(date = index(screen_out$data)[end] + 1:(look_ahead_windo
                              
 )
 
-plot_data <- rbind(plot_data, pred_data)
+plot_data <- rbind(plot_data[,1:9], pred_data)
+
 
 plot_data <- plot_data %>%
   mutate(
-    price_scale = as.numeric(scale(price)),
-    pattern1_scale = as.numeric(scale(pattern1)),
-    pattern2_scale = as.numeric(scale(pattern2)),
-    pattern3_scale = as.numeric(scale(pattern3)),
-    pattern4_scale = as.numeric(scale(pattern4)),
-    pattern5_scale = as.numeric(scale(pattern5)),
-    pattern6_scale = as.numeric(scale(pattern6)),
-    pattern7_scale = as.numeric(scale(pattern7)),
-    pattern8_scale = as.numeric(scale(pattern8)),
-    pattern9_scale = as.numeric(scale(pattern9)),
-    pattern10_scale = as.numeric(scale(pattern10))
+         pattern1_rescale = rescale_to_current(current_price = price, check_price = pattern1),
+         pattern2_rescale = rescale_to_current(current_price = price, check_price = pattern2),
+         pattern3_rescale = rescale_to_current(current_price = price, check_price = pattern3),
+         pattern4_rescale = rescale_to_current(current_price = price, check_price = pattern4),
+         pattern5_rescale = rescale_to_current(current_price = price, check_price = pattern5),
+         pattern6_rescale = rescale_to_current(current_price = price, check_price = pattern6),
+         pattern7_rescale = rescale_to_current(current_price = price, check_price = pattern7),
+         pattern8_rescale = rescale_to_current(current_price = price, check_price = pattern8),
+         pattern9_rescale = rescale_to_current(current_price = price, check_price = pattern9),
+         pattern10_rescale = rescale_to_current(current_price = price, check_price = pattern10)
   )
-
-plot_data <- plot_data %>%
-  mutate(
-         pattern1_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern1_scale"),
-         pattern2_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern2_scale"),
-         pattern3_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern3_scale"),
-         pattern4_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern4_scale"),
-         pattern5_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern5_scale"),
-         pattern6_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern6_scale"),
-         pattern7_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern7_scale"),
-         pattern8_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern8_scale"),
-         pattern9_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern9_scale"),
-         pattern10_rescale = rescale_to_current(plot_data = plot_data, pattern_scale_col = "pattern10_scale")
-  )
-
-
+         
+         
 ```
 
 
@@ -167,6 +153,48 @@ ggplot(plot_data, aes(x = date, y = price)) +
 ```
 
 
+```{r create_text_rmd_old, eval = FALSE, include = FALSE}
+src_text_rmd <- paste0("### Pattern{{idx}}", 
+                       "\n",
+                       "```{r}",
+                       "\n",
+                       "pattern_period <- paste0(index(screen_out$data[screen_out$index[{{idx}}]:(screen_out$index[{{idx}}] + (window_length -1))])[c(1,60)],collapse=' to ')",
+                       "\n\n",
+                       "ggplot(plot_data, aes(x = date, y = price)) + ",
+                       "geom_point() + ",
+                       "geom_smooth(aes(x = date, y = price)) + ",
+                       "geom_point(aes(x = date, y = pattern{{idx}}_rescale), color = 'red') + ",
+                       "geom_smooth(aes(x = date, y = pattern{{idx}}_rescale), color = 'darkgreen', span = 0.5) + ",
+                       "labs(title = pattern_period)",
+                       "\n\n",
+                       "```",
+                       "\n\n")
+
+src <- lapply(1:10, function(idx) knit_expand(text = src_text_rmd))
+```
+
+
+```{r create_text_rmd}
+src_text_rmd <- paste0("### Pattern{{idx}}", 
+                       "\n",
+                       "```{r}",
+                       "\n",
+                       "pattern_period <- paste0(index(screen_out$data[screen_out$index[{{idx}}]:(screen_out$index[{{idx}}] + (window_length -1))])[c(1,60)],collapse=' to ')",
+                       "\n\n",
+                       "my_ggplot(plot_data, pattern = paste0('pattern', {{idx}}, '_rescale'))",
+                       "\n\n",
+                       "```",
+                       "\n\n")
+
+src <- lapply(1:10, function(idx) knit_expand(text = src_text_rmd))
+```
+
+
+`r knit(text = unlist(src))`
+
+
+<!--
+
 ### Pattern 1
 
 ```{r pattern1_ggplot, echo = FALSE, warning = FALSE}
@@ -178,7 +206,9 @@ pattern_period <- paste0(
 
 ggplot(plot_data, aes(x = date, y = price)) +
   geom_point() +
-  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen", span = 0.5) +
+  geom_smooth(aes(x = date, y = price)) + 
+  geom_point(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "darkgreen") +
+  geom_smooth(aes_string(x = "date", y = paste0("pattern", idx, "_rescale")), color = "lightgreen", span = 0.5) +
   labs(title = pattern_period)
 
 ```
@@ -342,3 +372,4 @@ ggplot(plot_data, aes(x = date, y = price)) +
 
 ```
 
+-->

@@ -17,7 +17,7 @@
 require(pracma)
 require(quantmod)
 require(splines)
-
+library(lubridate)
 
 Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
   u <- -1
@@ -52,6 +52,26 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
   return(np.order.mat)
 }
 
+
+#' rescale_to_current
+#' 
+#' Scale the current price to a price that reflects the current price
+#'
+#'
+
+
+rescale_to_current <- function(current_price,
+                               check_price) {
+  
+  df <- data.frame(x = as.numeric(scale(current_price)),
+                   y = current_price)
+  
+  fit1 <- lm(y ~ x, data = df)
+  newdata <- data.frame(x = as.numeric(scale(check_price)))
+  out <- predict(fit1, newdata)
+  out
+  
+}
 
 
 
@@ -108,25 +128,26 @@ screen_pattern_match <- function( stockdata,
   win <- window_length
   
   ## current scaled price values upto the beginning of the windowed period
-  current_y <- as.vector(scale(vec[(end - (win - 1)) : end]))
+  current_y <- vec[(end - (win - 1)) : end]
   x <- seq(1, win)
   
   ## uses current_y to make predictions using specified method
   current_y_pred <- switch(
     EXPR = method,
-    percent = current_y / (dplyr::last(current_y)),
+    percent = current_y / (dplyr::first(current_y)), ## price change since beginning of pattern
     poly = predict(lm(current_y ~ poly(x, degree))),
     legendre = predict(lm(current_y ~ Legendre(t = x, n = degree))),
     ns = predict(lm(current_y ~ ns(x, df = df))),
     loess = predict(loess(current_y ~ x, span = span))
-    )
+  )
   
   ## Calculate RSE from current vs predicted
+  ## norm_val[i] is the RSE value for the index of the first day of the pattern
   norm_val <- NULL
   for( i in 1 : (end - (2 * win)) ) {
-    check_y <- as.vector(scale(vec[i : (i + (win - 1))]))
+    check_y <- rescale_to_current(current_price = current_y, check_price = vec[i : (i + (win - 1))])
     check_y_pred <- switch(method,
-                           percent = check_y / (dplyr::last(check_y)),
+                           percent = check_y / (dplyr::first(check_y)),  ## price change since beginning of pattern
                            poly = predict(lm(check_y ~ poly(x, degree))),
                            legendre = predict(lm(check_y ~ Legendre(t = x, n = degree))),
                            ns = predict(lm(check_y ~ ns(x, df = df))),
@@ -134,6 +155,7 @@ screen_pattern_match <- function( stockdata,
     
     norm_val[i] <- sum((current_y_pred - check_y_pred)^2)^(1/2)
   }
+  
   
   ## get indexes of the top n comparisons 
   idx <- which(norm_val <= sort(norm_val)[comparisons])
@@ -144,13 +166,13 @@ screen_pattern_match <- function( stockdata,
   ## (look_ahead_window + hold_days - 1)
   
   ## percent change from beginning of pattern to the hold days prediction
-  percent_change_window_hold <- round(vec[(idx + (win + hold_days))] / vec[idx], 3)
+  percent_change_window_hold <- round(vec[(idx + (win - 1 + hold_days))] / vec[idx], 3)
   
   ## percent change from beginning of pattern to the hold days + a look ahead prediction
   percent_change_window_holdlook <- round(vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[idx], 3)
   
   ## percent change from end of the pattern to the hold days prediction
-  percent_change_present_hold <- round(vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[(idx + win)], 3)
+  percent_change_present_hold <- round(vec[((idx + win - 1) + (hold_days))] / vec[(idx + win)], 3)
   
   ## percent change from end of the pattern to the hold days + a look ahead prediction
   percent_change_present_holdlook <- round(vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[(idx + win)], 3)

@@ -12,7 +12,7 @@ write_csv(x = data.frame("date", "symbol", "open", "high", "low", "close", "volu
           path = "data/google-finance-dump.csv", 
           col_names = FALSE)
 
-end_chunks <- NROW(stocks) %/% 5
+end_chunks <- NROW(stocks) %/% 5 + 1
 for( chunk in 1 : end_chunks ) {
   
   cat("Running chunk: ", chunk, "\n")

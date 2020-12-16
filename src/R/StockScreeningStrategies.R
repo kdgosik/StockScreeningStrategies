@@ -213,8 +213,11 @@ Legendre<-function( t, np.order=1,tmin=NULL, tmax=NULL ) {
 require(pracma)
 require(quantmod)
 require(splines)
+source("/home/kirk/Documents/projects/StockScreeningStrategies/src/R/utils.R")
 
-stockdata <- getSymbols("CTIB", auto.assign = FALSE)["/2020-06-10"]
+this_symbol <- "HMY"
+this_date <- "2020-07-06"
+stockdata <- getSymbols(this_symbol, auto.assign = FALSE)[paste0("/", this_date)]
 window_length = 60
 look_ahead_window = 60
 hold_days = 5
@@ -250,13 +253,13 @@ span = 0.75
   win <- window_length
   
   ## current scaled price values upto the beginning of the windowed period
-  current_y <- as.vector(scale(vec[(end - (win - 1)) : end]))
+  current_y <- vec[(end - (win - 1)) : end]
   x <- seq(1, win)
   
   ## uses current_y to make predictions using specified method
   current_y_pred <- switch(
     EXPR = method,
-    percent = current_y / (dplyr::last(current_y)),
+    percent = current_y / (dplyr::first(current_y)), ## price change since beginning of pattern
     poly = predict(lm(current_y ~ poly(x, degree))),
     legendre = predict(lm(current_y ~ Legendre(t = x, n = degree))),
     ns = predict(lm(current_y ~ ns(x, df = df))),
@@ -267,9 +270,9 @@ span = 0.75
   ## norm_val[i] is the RSE value for the index of the first day of the pattern
   norm_val <- NULL
   for( i in 1 : (end - (2 * win)) ) {
-    check_y <- as.vector(scale(vec[i : (i + (win - 1))]))
+    check_y <- rescale_to_current(current_price = current_y, check_price = vec[i : (i + (win - 1))])
     check_y_pred <- switch(method,
-                           percent = check_y / (dplyr::last(check_y)),
+                           percent = check_y / (dplyr::first(check_y)),  ## price change since beginning of pattern
                            poly = predict(lm(check_y ~ poly(x, degree))),
                            legendre = predict(lm(check_y ~ Legendre(t = x, n = degree))),
                            ns = predict(lm(check_y ~ ns(x, df = df))),
@@ -286,16 +289,16 @@ span = 0.75
   ## (look_ahead_window + hold_days - 1)
   
   ## percent change from beginning of pattern to the hold days prediction
-  percent_change_window_hold <- vec[(idx + (win + hold_days))] / vec[idx]
+  percent_change_window_hold <- round(vec[(idx + (win - 1 + hold_days))] / vec[idx], 3)
   
   ## percent change from beginning of pattern to the hold days + a look ahead prediction
-  percent_change_window_holdlook <- vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[idx]
+  percent_change_window_holdlook <- round(vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[idx], 3)
   
   ## percent change from end of the pattern to the hold days prediction
-  percent_change_present_hold <- vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[(idx + win)]
+  percent_change_present_hold <- round(vec[((idx + win - 1) + (hold_days))] / vec[(idx + win)], 3)
   
   ## percent change from end of the pattern to the hold days + a look ahead prediction
-  percent_change_present_holdlook <- vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[(idx + win)]
+  percent_change_present_holdlook <- round(vec[((idx + win -1) + (look_ahead_window + hold_days))] / vec[(idx + win)], 3)
   
   list(data = stockdata,
        index = idx,

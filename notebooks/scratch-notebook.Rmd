@@ -19,6 +19,7 @@ library(visNetwork)
 
 
 data_path <- "~/Documents/projects/StockScreeningStrategies/data/"
+backtest <- read_csv(paste0(data_path, "backtest-screen-pattern-match.csv"))
 ```
 
 
@@ -105,7 +106,8 @@ topn <- backtest %>%
   group_by(buy_date) %>% 
   arrange(-screen_avg_change) %>% 
   # slice_head(n = 1) %>% ## input$topn) %>%
-  top_n(n = 1) %>% ## input$topn
+  # slice_max(n = 1, order_by = -screen_avg_change) %>%  ## NOT THE SAME AS top_n
+  ## top_n(n = 1) %>% ## input$topn  ## returns top N based off of last column (percent_change)
   group_by(buy_date) %>% 
   summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
   filter(return > 0) %>% 
@@ -113,3 +115,213 @@ topn <- backtest %>%
   mutate(cumprod = round(cumprod(return), 4))
 
 ```
+
+
+
+
+
+## Create Summaries For Different Parameter Settings
+
+  - screen type
+  - top N
+  - screen percent change metric
+  - price of stock (below a certain value)
+  - unique number of patterns
+  - norm value (below a certain value)
+
+
+For each setting creating summary of how the screen method would do across all the weeks.
+
+```{r}
+screen_type <- c("percent", "poly", "legendre", "ns", "loess")
+topn_cutoff <- 1:20
+screen_metric <- c("percent_change_window_hold", "percent_change_window_holdlook",
+                   "percent_change_present_hold", "percent_change_present_holdlook")
+screen_change <- seq(1, 1.25, 0.05)
+num_patterns <- 2:7
+price_cutoff <- c(2, 5, 10, 20, 50, 100, 1000, 1e6)
+# norm_cutoff <- 1:5
+
+hypertune_out <- lapply(screen_type, function(st) {
+  lapply(topn_cutoff, function(n) {
+    lapply(screen_metric, function(sm) {
+      lapply(screen_change, function(sc) {
+        lapply(num_patterns, function(np) {
+          lapply(price_cutoff, function(pc) {
+       
+## testing parameters     
+# st <- "percent"
+# n <- 1
+# sm <- "percent_change_present_hold"
+# sc <- 1.1
+# np <- 5
+# pc <- 1e6
+            
+            out <- backtest %>%
+              rename(screen_change = ends_with(match = sm)) %>% ## screen_metric (sm)
+              filter(monday_open > 0, friday_close > 0) %>%
+              mutate(percent_change = friday_close / monday_open) %>%
+              mutate(screen_avg_change = to_avg( screen_change ),
+                     screen_prop_up = to_prop( screen_change ),
+                     unique_patterns = unique_patterns( index )) %>%
+              filter(screen_prop_up  == 1,
+                     screen_type == st, ## screen_type (st)
+                     unique_patterns >= np,  ## num_patterns (np)
+                     screen_avg_change > sc, ## screen_change (sc)
+                     monday_open < pc) %>% ## price_cutoff (pc)
+              group_by( buy_date ) %>% 
+              arrange( -screen_avg_change ) %>%
+              slice_head( n = n ) %>%  ## topn_cutoff (n)
+              group_by( buy_date ) %>% 
+              summarise( gross = sum(percent_change), total = n(), return = gross/total ) %>% 
+              ungroup %>%
+              mutate(cumprod = round(cumprod(return), 4),
+                     screen_type = st,
+                     topn_cutoff = n,
+                     screen_metric = sm,
+                     screen_change = sc,
+                     num_patterns = np,
+                     price_cutoff = pc
+                     ) 
+            
+            ## output backtest summary
+            out
+            
+            
+          }) %>% ## END: price_cutoff
+            do.call(rbind, .)
+          
+        }) %>% ## END: num_patterns
+          do.call(rbind, .)
+        
+      }) %>% ## END: screen_metric
+        do.call(rbind, .)
+      
+    }) %>% ## END: screen_change
+      do.call(rbind, .)
+    
+  }) %>% ## END: topn_cutoff
+    do.call(rbind, .)
+    
+}) %>% ## END: screen_type
+  do.call(rbind, .)
+
+
+# 
+# backtest %>%
+#   rename(screen_change = ends_with(match = sm)) %>% ## screen_change
+#   filter(monday_open > 0, friday_close > 0) %>%
+#   mutate(percent_change = friday_close / monday_open) %>%
+#   mutate(screen_avg_change = to_avg( percent_change_window_hold ),  ## percent_change_present_hold
+#          screen_prop_up = to_prop( percent_change_window_hold ),
+#          unique_patterns = unique_patterns( index )) %>%
+#   # select(buy_date, sell_date, symbol, monday_open, friday_close, screen_type, 
+#   #        screen_avg_change, screen_prop_up, percent_change) %>%
+#         filter(screen_prop_up  == 1,
+#              screen_type == input$screen_type, 
+#              screen_avg_change > input$screen_avg_change,
+#              monday_open < input$price_cutoff) %>%
+#       group_by(buy_date) %>% 
+#       arrange(-screen_avg_change) %>% 
+#       slice_head(n = ) %>%
+#       group_by(buy_date) %>% 
+#       summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+#       filter(return > 0) %>% 
+#       ungroup %>%
+#       mutate(cumprod = round(cumprod(return), 4))
+# 
+# 
+# 
+# 
+# 
+#     backtest %>%
+# 
+#       mutate(screen_avg_change = to_avg( screen_change ),  ## percent_change_present_hold
+#              screen_prop_up = to_prop( screen_change )) %>%
+#       select(buy_date, sell_date, symbol, monday_open, friday_close, screen_type, 
+#              screen_avg_change, screen_prop_up, percent_change) %>%
+#       filter(screen_prop_up  == 1,
+#              screen_type == input$screen_type, 
+#              screen_avg_change > input$screen_avg_change,
+#              monday_open < input$price_cutoff) %>%
+#       group_by(buy_date) %>% 
+#       arrange(-screen_avg_change) %>% 
+#       # slice_head(n = input$topn) %>%
+#       top_n(n = input$topn) %>%
+#       group_by(buy_date) %>% 
+#       summarise(gross = sum(percent_change), total = n(), return = gross/total) %>% 
+#       filter(return > 0) %>% 
+#       ungroup %>%
+#       mutate(cumprod = round(cumprod(return), 4))
+# 
+
+```
+
+
+```{r}
+st <- "poly"
+sm <- "percent_change_present_hold"
+np <- 2
+sc <- 1
+pc <- 1e6
+n <- 1
+  
+backtest_summary <- backtest %>%
+  rename(screen_change = ends_with(match = sm)) %>% ## screen_metric (sm)
+  filter(monday_open > 0, friday_close > 0, screen_type == st) %>%
+  mutate(percent_change = friday_close / monday_open) %>%
+  mutate(screen_avg_change = to_avg( screen_change ),
+         screen_prop_up = to_prop( screen_change ),
+         unique_patterns = unique_patterns( index ),
+         norm_avg_value = to_avg( norm_values )) %>%
+  filter(screen_prop_up  == 1,
+         screen_type == st, ## screen_type (st)
+         unique_patterns >= np,  ## num_patterns (np)
+         screen_avg_change > sc, ## screen_change (sc)
+         monday_open < pc) %>% ## price_cutoff (pc)
+  group_by( buy_date ) %>%
+  arrange( -screen_avg_change ) %>%
+  slice_head( n = n ) %>%  ## topn_cutoff (n)
+  group_by( buy_date ) %>%
+  summarise( gross = sum(percent_change), total = n(), return = gross/total ) %>%
+  ungroup %>%
+  mutate(cumprod = round(cumprod(return), 4),
+         screen_type = st,
+         topn_cutoff = n,
+         screen_metric = sm,
+         screen_change_cutoff = sc,
+         num_patterns = np,
+         price_cutoff = pc)
+
+
+
+
+```
+
+
+### SMA, MACD, RunCorr
+
+  - Maybe use EMA
+
+```{r}
+workingdata <- cbind(quantmod::OHLC(stockdata),
+                     TTR::SMA(quantmod::Cl(stockdata), n = 50),    
+                     TTR::SMA(quantmod::Cl(stockdata), n = 200),
+                     TTR::MACD(quantmod::Cl(stockdata)),
+                     TTR::runCor(1:NROW(stockdata), TTR::SMA(quantmod::Cl(stockdata), n = 50), n =10)
+                               ) %>% as.data.frame
+colnames(workingdata) <- c("Open", "High", "Low", "Close", "SMA50", "SMA200", "MACD", "MACDsignal", "runcorr")
+
+workingdata <- workingdata %>%
+    dplyr::mutate(Date = as.Date(index(stockdata)),
+                  SMA50above200 = as.numeric(SMA50 > SMA200),
+                  MACDAboveSignal = as.numeric(MACD > MACDsignal),
+                  runcorPos = as.numeric(runcorr > 0),
+                  Position = as.numeric(SMA50above200 + MACDAboveSignal + runcorPos == 3)
+    ) %>%
+    ts %>%
+    as.xts
+  
+  index(workingdata) <- index(stockdata)
+```
+

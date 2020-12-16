@@ -5,9 +5,49 @@
 #' 
 library(dplyr)
 library(magrittr)
-stocks <- TTR::stockSymbols() %>%
-  as.data.frame() %>%
-  filter(LastSale > 2, LastSale < 10)
+# stocks <- TTR::stockSymbols() %>%
+#   as.data.frame() %>%
+#   filter(LastSale > 2, LastSale < 10)
+
+
+
+#' rescale_to_current
+#' 
+#' Scale the current price to a price that reflects the current price
+#'
+#'
+#'
+
+
+rescale_to_current <- function(current_price,
+                               check_price) {
+  
+  df <- data.frame(x = as.numeric(scale(current_price)),
+                   y = current_price)
+  
+  fit1 <- lm(y ~ x, data = df)
+  newdata <- data.frame(x = as.numeric(scale(check_price)))
+  out <- predict(fit1, newdata)
+  out
+  
+}
+
+
+
+#'
+#'
+#'
+#'
+
+my_ggplot <- function( plot_data, pattern = "pattern1_rescale" ) { 
+  
+  ggplot(plot_data, aes(date, price)) + 
+    geom_point() + 
+    geom_line() +
+    geom_point(aes_string("date", pattern), color="red") + 
+    geom_line(aes_string("date", pattern),color="red") 
+  
+}
 
 
 #' two_week_return

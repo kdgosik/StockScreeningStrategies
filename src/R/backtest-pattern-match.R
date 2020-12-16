@@ -16,12 +16,13 @@ if( !{file.exists("data/backtest-screen-pattern-match.csv")} ) {
             col_names = FALSE)
 }
 
-## first Monday in 2019 until 75 weeks later
-mondays <- ymd("2019-01-07") + 7 * 0:75
+## first Monday in 2019 until 77 weeks later
+mondays <- ymd("2019-01-07") + 7 * 0:76
 
 ## get stocks
 # source("src/R/google-finance-dump.R")
-stocks <- read_csv("data/google-finance-dump.csv")
+stocks <- read_csv("data/google-finance-dump.csv") %>% 
+  filter(str_ends(symbol, "-[A-Z]{1,3}", negate = TRUE), open > 0.5)
 stock_symbols <- unique(stocks$symbol)
 
 
@@ -97,12 +98,12 @@ backtest_pattern_screen <- lapply(mondays[(1 + chunk_size*(chunk-1)) : (chunk_si
                                span = span)
           },
           error = function(e) list(
-            index = 0,
-            norm_values = 0,
-            percent_change_window_hold = 0, 
-            percent_change_window_holdlook = 0,
-            percent_change_present_hold = 0,
-            percent_change_present_holdlook = 0
+            index = NA,
+            norm_values = NA,
+            percent_change_window_hold = NA, 
+            percent_change_window_holdlook = NA,
+            percent_change_present_hold = NA,
+            percent_change_present_holdlook = NA
           ))
     
           ## open price monday else return 0
@@ -135,7 +136,6 @@ backtest_pattern_screen <- lapply(mondays[(1 + chunk_size*(chunk-1)) : (chunk_si
       
       
       }) %>%
-      # } %>%
       do.call(rbind, .) %>%
       as.data.frame() ## END: symbol
     
